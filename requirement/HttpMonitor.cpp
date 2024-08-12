@@ -1,121 +1,92 @@
 #include "HttpMonitor.h"
+#include "global.h"
 #include <iostream>
-
-bool checkTcpHttp(pcpp::TcpLayer*);
-bool checkTcpHttps(pcpp::TcpLayer*);
-bool checkTcpMysql(pcpp::TcpLayer*);
 
 HttpMonitor* HttpMonitor::m_instance = nullptr;
 
-
-#define __SEG__LINE__ "---------------------------------------------------"
-
-// interfaces
-HttpMonitor::HttpMonitor()
+/* interfaces */
+HttpMonitor::HttpMonitor() : CLowLayersUnlocker()
 {
 
 }
 
 HttpMonitor::~HttpMonitor()
 {
-
+    
 }
 
-bool HttpMonitor::unlockHTTPRequestPacket(pcpp::Packet* httpPacket, p_adwfOn_t ad)
+bool HttpMonitor::unlockHTTPRequestPacket(pcpp::Packet* httpPacket, p_adwfOn_t ad) 
 {
-    // std::cout << "start of unlock Http request." << std::endl;
-    pcpp::EthLayer* packEthernetLayer ;
-    pcpp::IPv4Layer* packIPv4Layer;
-    pcpp::TcpLayer* packTCPLayer;
+#ifdef DEBUG_MODE_GLOBAL
+    std::cout << "start of unlock Http request." << std::endl;
+#endif
+    unlockLowLayers(httpPacket, ad);
     pcpp::HttpRequestLayer* packHttpRequestLayer;
-    if( !(packEthernetLayer = httpPacket->getLayerOfType<pcpp::EthLayer>()) || !(packIPv4Layer = httpPacket->getLayerOfType<pcpp::IPv4Layer>())
-        || !(packTCPLayer = httpPacket->getLayerOfType<pcpp::TcpLayer>()) || !(packHttpRequestLayer = httpPacket->getLayerOfType<pcpp::HttpRequestLayer>()) ) return false;
-
-
-    // Debug
-    if( checkTcpHttp(packTCPLayer) )
-        std::cout << "http request packet received." << std::endl;
-    else if( checkTcpHttps(packTCPLayer) )
-        std::cout << "https request packet received." << std::endl;
-
-    ad->srcMacAddress = packEthernetLayer->getSourceMac().toString();
-    ad->dstMacAddress = packEthernetLayer->getDestMac().toString();
-    ad->etherType = pcpp::netToHost16(packEthernetLayer->getEthHeader()->etherType);
-
-    ad->srcIPAddress = packIPv4Layer->getSrcIPAddress().toString();
-    ad->dstIPAddress = packIPv4Layer->getDstIPAddress().toString();
-    ad->ipid = pcpp::netToHost16(packIPv4Layer->getIPv4Header()->ipId);
-    ad->TTL = (uint8_t)packIPv4Layer->getIPv4Header()->timeToLive;
-
-    ad->srcTcpPort = packTCPLayer->getSrcPort();
-    ad->dstTcpPort = packTCPLayer->getDstPort();
-    ad->wdSize = pcpp::netToHost16(packTCPLayer->getTcpHeader()->windowSize);
-    ad->tcpFlags = getTcpFlagsByLayer(packTCPLayer);
+    // verify the packet has http request layer.
+    if( !(packHttpRequestLayer = httpPacket->getLayerOfType<pcpp::HttpRequestLayer>()) )
+    {
+         return false;
+    }
 
     ad->httpMethod = getHttpMethodByRequestLayer(packHttpRequestLayer);
     ad->httpRequestUri = packHttpRequestLayer->getFirstLine()->getUri();
-    ad->httpHost = packHttpRequestLayer->getFieldByName(PCPP_HTTP_HOST_FIELD)->getFieldValue();
-    ad->httpUserAgent = packHttpRequestLayer->getFieldByName(PCPP_HTTP_USER_AGENT_FIELD)->getFieldValue();
 
-    
-    // try to output a whole parsed http packet.
-    size_t packHeaderLen = packHttpRequestLayer->getHeaderLen();
-    std::cout << "Header: " << std::endl;
-    unsigned char* hdBegin = packHttpRequestLayer->getData();
-    for( int i=0; i<packHeaderLen; i++ )
-    {
-        std::cout << *(hdBegin+i) ;
+    m_httpHeaderFields.push_back(HTTPHeaderFieldClause(HTTPHEADER_NAME_METHOD,ad->httpMethod));
+    m_httpHeaderFields.push_back(HTTPHeaderFieldClause(HTTPHEADER_NAME_REQUEST_URI,ad->httpRequestUri));
+
+    pcpp::HeaderField* hf;
+    if( hf = packHttpRequestLayer->getFieldByName(PCPP_HTTP_HOST_FIELD) ) {
+        ad->httpHost = hf->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_HOST_FIELD,ad->httpHost));
     }
-    std::cout << std::endl;
-
-    std::cout << "Body: " << std::endl;
-    unsigned char* bdBegin = hdBegin + packHeaderLen;
-    size_t packBodyLen = packHttpRequestLayer->getDataLen() - packHeaderLen;
-    for( int i=0; i<packHeaderLen; i++ )
-    {
-        std::cout << *(bdBegin+i) ;
+    ad->httpWholeURL = ad->httpHost + ad->httpRequestUri;
+    m_httpHeaderFields.push_back(HTTPHeaderFieldClause(HTTPHEADER_NAME_REQUEST_WHOLE_URL,ad->httpWholeURL));
+    if( hf = packHttpRequestLayer->getFieldByName(PCPP_HTTP_USER_AGENT_FIELD) ) {
+        ad->httpUserAgent = hf->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_USER_AGENT_FIELD,ad->httpUserAgent));
     }
-    std::cout << std::endl;
 
-    // a segmentation falut here.
-    // ad->httpCookie = packHttpRequestLayer->getFieldByName(PCPP_HTTP_COOKIE_FIELD)->getFieldValue();
-    // std::cout << "end of unlockHttpRequest." << std::endl;
+    if( packHttpRequestLayer->getFieldByName(PCPP_HTTP_COOKIE_FIELD) )
+    {
+        ad->httpCookie = packHttpRequestLayer->getFieldByName(PCPP_HTTP_COOKIE_FIELD)->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_COOKIE_FIELD,ad->httpCookie));
+    }
+    ad->httpMsgBody = getHttpRequestMsgBody(packHttpRequestLayer);
+#ifdef DEBUG_MODE_GLOBAL
+    std::cout << "end of unlockHttpRequest." << std::endl;
+#endif
     return true;
+
+}
+
+std::shared_ptr<std::string> HttpMonitor::getHttpRequestInfo(const p_adwfOn_t ad) const
+{
+    std::string httpInfo = std::string("") 
+        + *(getLowLayerInfo(ad)) + "\n"
+        + __SEG__LINE__ + "\n"
+        + HTTP_INFO_REQUEST_TITLE + "\n";
+
+    for( qcy::Vec<HTTPHeaderFieldClause>::iterator it = m_httpHeaderFields.begin(); it != m_httpHeaderFields.end(); ++it )
+    {
+        size_t nameLen = it->Name.size();
+        httpInfo = httpInfo + it->Name + ": ";
+        for( size_t i = nameLen; i < HTTP_HEADER_NAME_LENGTH; i++ ) httpInfo = httpInfo + " ";
+        httpInfo = httpInfo + it->Value + "\n";
+    }
+    httpInfo = httpInfo + __SEG__LINE__ + "\n" + "\n";
+
+    return std::make_shared<std::string>(httpInfo);
 }
 
 // print the http request information to stdout. Maybe other logics we need.
-void HttpMonitor::httpRequestLogic(adwfOn_t* ad)
+void HttpMonitor::httpRequestLogic(adwfOn_t* ad) const 
 {
-    // std::cout << "start of httpLogic" << std::endl;
-    std::string httpInfo = std::string("") 
-        + "\n"
-        + __SEG__LINE__ + "\n"
-        + "  |-- ETHERNET INFO --|   " + "\n"
-        + "Source Mac Address:   " + ad->srcMacAddress + "\n"
-        + "Dest Mac Address:     " + ad->dstMacAddress + "\n"
-        + "Ethernet type:        " + std::to_string(ad->etherType) + "\n"
-        + __SEG__LINE__ + "\n"
-        + "  |-- IPV4 INFO --|   " + "\n"
-        + "Source IP Address:    " + ad->srcIPAddress + "\n"
-        + "Dest IP Address:      " + ad->dstIPAddress + "\n"
-        + "IP ID:                " + std::to_string(ad->ipid) + "\n"
-        + "TTL:                  " + std::to_string(ad->TTL) + "\n"
-        + __SEG__LINE__ + "\n"
-        + "  |-- TCP INFO --|   " + "\n"
-        + "Source TCP Port:      " + std::to_string(ad->srcTcpPort) + "\n"
-        + "Dest TCP Port:        " + std::to_string(ad->dstTcpPort) + "\n"
-        + "TCP FLAGS:            " + ad->tcpFlags + "\n"
-        + "Window Size:          " + std::to_string(ad->wdSize) + "\n"
-        + __SEG__LINE__ + "\n"
-        + "  |-- HTTP INFO --|   " + "\n"
-        + "HTTP Method:          " + ad->httpMethod + "\n"
-        + "HTTP Request URI:     " + ad->httpRequestUri + "\n"
-        + "HTTP Host:            " + ad->httpHost + "\n"
-        + "HTTP User Agent:      " + ad->httpUserAgent + "\n"
-        + "HTTP Cookie:          " + ad->httpCookie + "\n"
-        + "\n";
-    IOOP_TYPE io_op = STDOUT;
-    IOOp_t tmpIOOp(io_op,httpInfo);
+#ifdef DEBUG_MODE_GLOBAL
+    std::cout << "start of httpLogic" << std::endl;
+#endif
+    std::shared_ptr<std::string> shp_httpInfo = getHttpRequestInfo(ad);
+    TYPE_IOOP io_op = STDOUT;
+    IOOp_t tmpIOOp(io_op,*shp_httpInfo);
     IO_t* io_ins = IO_t::getInstance();
     
     // all IO operations are executed in IO thread pool
@@ -135,43 +106,131 @@ void HttpMonitor::httpRequestLogic(adwfOn_t* ad)
     
 }
 
-bool unlockHTTPResponsePacket(pcpp::Packet* httpPacket, p_adwfOn_t ad)
+auto 
+HttpMonitor::getHttpRequestMsgBody(const pcpp::HttpRequestLayer* httpRequestLayer) const -> std::shared_ptr<std::string>
 {
+    // try to put msgBody in ad.
+    std::string httpRequestMsg = std::string("");
+    size_t packHeaderLen = httpRequestLayer->getHeaderLen();
+    unsigned char* hdBegin = httpRequestLayer->getData();
+    unsigned char* bdBegin = hdBegin + packHeaderLen;
+    size_t packBodyLen = httpRequestLayer->getDataLen() - packHeaderLen;
+    for( int i = 0; i < packBodyLen ; i ++ )
+    {
+        httpRequestMsg += *(bdBegin+i) ;
+    }
+    std::shared_ptr<std::string> ret = std::make_shared<std::string>(httpRequestMsg);
+    // std::cout << httpRequestMsg << std::endl;
+    return ret;
+}
 
+bool HttpMonitor::unlockHTTPResponsePacket(pcpp::Packet* httpPacket,
+                                           p_adwfOn_t ad)
+{
+    unlockLowLayers(httpPacket, ad);
+    pcpp::HttpResponseLayer* packHttpResponseLayer;
+    if( !(packHttpResponseLayer = httpPacket->getLayerOfType<pcpp::HttpResponseLayer>()) ) return false;
+
+    ad->httpResponseStatusCode = packHttpResponseLayer->getFirstLine()->getStatusCode();
+    ad->httpResponseStatusCodeString = packHttpResponseLayer->getFirstLine()->getStatusCodeString();
+    ad->httpResponseWholeStatusString = std::to_string(ad->httpResponseStatusCode) + ad->httpResponseStatusCodeString;
+    m_httpHeaderFields.push_back(HTTPHeaderFieldClause(HTTPHEADER_NAME_RESPONSE_WHOLESTATUS,ad->httpResponseWholeStatusString));
+
+    pcpp::HeaderField* hf;
+    if( hf = packHttpResponseLayer->getFieldByName(PCPP_HTTP_SERVER_FIELD) )  {
+        ad->httpResponseServer = hf->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_SERVER_FIELD,ad->httpResponseServer));
+    }
+    else ad->httpResponseServer = "";
+
+    if( hf = packHttpResponseLayer->getFieldByName(PCPP_HTTP_CONNECTION_FIELD) )  {
+        ad->httpResponseConnection = hf->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_CONNECTION_FIELD,ad->httpResponseConnection));
+    }
+    else ad->httpResponseConnection = "";
+
+    if( hf = packHttpResponseLayer->getFieldByName(PCPP_HTTP_CONTENT_TYPE_FIELD) )  {
+        ad->httpResponseContentType = hf->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_CONTENT_TYPE_FIELD,ad->httpResponseContentType));
+    }
+    else ad->httpResponseContentType = "";
+
+    if( hf = packHttpResponseLayer->getFieldByName(PCPP_HTTP_CONTENT_LENGTH_FIELD) )  {
+        ad->httpResponseContentLength = hf->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_CONTENT_LENGTH_FIELD,ad->httpResponseContentLength));
+    }
+    else ad->httpResponseContentLength = "";
+
+    if( hf = packHttpResponseLayer->getFieldByName(PCPP_HTTP_CONTENT_ENCODING_FIELD) ) {
+        ad->httpResponseContentEncoding = hf->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_CONTENT_ENCODING_FIELD,ad->httpResponseContentEncoding));
+    }
+    else { ad->httpResponseContentEncoding = "nullptr"; m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_CONTENT_ENCODING_FIELD,ad->httpResponseContentEncoding));}
+
+    ad->httpMsgBody = getHttpResponseMsgBody(packHttpResponseLayer);
+
+    // std::cout << "end of unlockHTTPResponsePacket." << std::endl;
 
     return true;
 }
 
-bool httpResponseLogic(adwfOn_t* ad)
+std::shared_ptr<std::string> HttpMonitor::getHttpResponseInfo(const adwfOn_t* ad) const
 {
+    std::string httpResponseInfo = std::string("") 
+        + *(getLowLayerInfo(ad)) + "\n"
+        + __SEG__LINE__ + "\n"
+        + HTTP_INFO_RESPONSE_TITLE + "\n"
+        + __SEG__LINE__ + "\n";
 
+    for( qcy::Vec<HTTPHeaderFieldClause>::iterator it = m_httpHeaderFields.begin(); it != m_httpHeaderFields.end(); ++it )
+    {
+        size_t nameLen = it->Name.size();
+        httpResponseInfo = httpResponseInfo + it->Name + ": ";
+        for( size_t i = nameLen; i < HTTP_HEADER_NAME_LENGTH; i++ ) httpResponseInfo = httpResponseInfo + " ";
+        httpResponseInfo = httpResponseInfo + it->Value + "\n";
+    }
+    httpResponseInfo = httpResponseInfo + __SEG__LINE__ + "\n" + "\n";
+    
+    return std::make_shared<std::string>(httpResponseInfo);
+}
+
+bool HttpMonitor::httpResponseLogic(adwfOn_t* ad) const 
+{
+    std::shared_ptr<std::string> shp_httpResponseInfo = getHttpResponseInfo(ad);
+    TYPE_IOOP io_op = STDOUT;
+    IOOp_t tmpIOOp(io_op,*shp_httpResponseInfo);
+    IO_t* io_ins = IO_t::getInstance();
+    
+    // all IO operations are executed in IO thread pool
+    io_ins->putIOOpInQAndSignal(tmpIOOp);
 
     return true;
 }
 
-void HttpMonitor::printAD(p_adwfOn_t ad)
+auto
+HttpMonitor::getHttpResponseMsgBody(const pcpp::HttpResponseLayer* httpResponseLayer) const -> std::shared_ptr<std::string> 
 {
+    // try to put msgBody in ad.
+    std::string httpResponseMsg = std::string("");
+    size_t packHeaderLen = httpResponseLayer->getHeaderLen();
+    unsigned char* hdBegin = httpResponseLayer->getData();
+    unsigned char* bdBegin = hdBegin + packHeaderLen;
+    size_t packBodyLen = httpResponseLayer->getDataLen() - packHeaderLen;
+    for( int i = 0; i < packBodyLen; i++ )
+    {
+        httpResponseMsg += *(bdBegin+i) ;
+    }
+    std::shared_ptr<std::string> ret = std::make_shared<std::string>(httpResponseMsg);
+    // std::cout << httpResponseMsg << std::endl;
+    return ret;
+}
 
-    // std::cout << "start of httpLogic" << std::endl;
+void HttpMonitor::printAD(const p_adwfOn_t ad)
+{
     std::string httpInfo = std::string("") 
         + "\n"
         + __SEG__LINE__ + "\n"
-        + "  |-- ETHERNET INFO --|   " + "\n"
-        + "Source Mac Address:   " + ad->srcMacAddress + "\n"
-        + "Dest Mac Address:     " + ad->dstMacAddress + "\n"
-        + "Ethernet type:        " + std::to_string(ad->etherType) + "\n"
-        + __SEG__LINE__ + "\n"
-        + "  |-- IPV4 INFO --|   " + "\n"
-        + "Source IP Address:    " + ad->srcIPAddress + "\n"
-        + "Dest IP Address:      " + ad->dstIPAddress + "\n"
-        + "IP ID:                " + std::to_string(ad->ipid) + "\n"
-        + "TTL:                  " + std::to_string(ad->TTL) + "\n"
-        + __SEG__LINE__ + "\n"
-        + "  |-- TCP INFO --|   " + "\n"
-        + "Source TCP Port:      " + std::to_string(ad->srcTcpPort) + "\n"
-        + "Dest TCP Port:        " + std::to_string(ad->dstTcpPort) + "\n"
-        + "TCP FLAGS:            " + ad->tcpFlags + "\n"
-        + "Window Size:          " + std::to_string(ad->wdSize) + "\n"
+        + *(getLowLayerInfo(ad)) + "\n"
         + __SEG__LINE__ + "\n"
         + "  |-- HTTP INFO --|   " + "\n"
         + "HTTP Method:          " + ad->httpMethod + "\n"
@@ -180,65 +239,16 @@ void HttpMonitor::printAD(p_adwfOn_t ad)
         + "HTTP User Agent:      " + ad->httpUserAgent + "\n"
         + "HTTP Cookie:          " + ad->httpCookie + "\n"
         + "\n";
-    IOOP_TYPE io_op = STDOUT;
+    TYPE_IOOP io_op = STDOUT;
     IOOp_t tmpIOOp(io_op,httpInfo);
     IO_t* io_ins = IO_t::getInstance();
     
     // all IO operations are executed in IO thread pool
     io_ins->putIOOpInQAndSignal(tmpIOOp);
-    // std::cout << std::endl 
-    //     << __SEG__LINE__ << std::endl
-    //     << "  |-- ETHERNET INFO --|   " << std::endl
-    //     << "Source Mac Address:   " << ad->srcMacAddress << std::endl
-    //     << "Dest Mac Address:     " << ad->dstMacAddress << std::endl
-    //     << "Ethernet type:        " << ad->etherType << std::endl
-    //     << __SEG__LINE__ << std::endl
-    //     << "  |-- IPV4 INFO --|   " << std::endl
-    //     << "Source IP Address:    " << ad->srcIPAddress << std::endl
-    //     << "Dest IP Address:      " << ad->dstIPAddress << std::endl
-    //     << "IP ID:                " << ad->ipid << std::endl
-    //     << "TTL:                  " << ad->TTL << std::endl
-    //     << __SEG__LINE__ << std::endl
-    //     << "  |-- TCP INFO --|   " << std::endl
-    //     << "Source TCP Port:      " << ad->srcTcpPort << std::endl
-    //     << "Dest TCP Port:        " << ad->dstTcpPort << std::endl
-    //     << "TCP FLAGS:            " << ad->tcpFlags << std::endl
-    //     << "Window Size:          " << ad->wdSize << std::endl
-    //     << __SEG__LINE__ << std::endl
-    //     << "  |-- HTTP INFO --|   " << std::endl
-    //     << "HTTP Method:          " << ad->httpMethod << std::endl
-    //     << "HTTP Request URI:     " << ad->httpRequestUri << std::endl
-    //     << "HTTP Host:            " << ad->httpHost << std::endl
-    //     << "HTTP User Agent:      " << ad->httpUserAgent << std::endl
-    //     << "HTTP Cookie:          " << ad->httpCookie << std::endl
-    //     << std::endl;
 }
 
-// tool functions of class
-std::string HttpMonitor::getTcpFlagsByLayer(pcpp::TcpLayer* tcpLayer)
-{
-    std::string result = "";
-    if (tcpLayer->getTcpHeader()->synFlag == 1)
-        result += "SYN ";
-    if (tcpLayer->getTcpHeader()->ackFlag == 1)
-        result += "ACK ";
-    if (tcpLayer->getTcpHeader()->pshFlag == 1)
-        result += "PSH ";
-    if (tcpLayer->getTcpHeader()->cwrFlag == 1)
-        result += "CWR ";
-    if (tcpLayer->getTcpHeader()->urgFlag == 1)
-        result += "URG ";
-    if (tcpLayer->getTcpHeader()->eceFlag == 1)
-        result += "ECE ";
-    if (tcpLayer->getTcpHeader()->rstFlag == 1)
-        result += "RST ";
-    if (tcpLayer->getTcpHeader()->finFlag == 1)
-        result += "FIN ";
-
-    return result;
-}
-
-std::string HttpMonitor::getHttpMethodByRequestLayer(pcpp::HttpRequestLayer* httpLayer)
+/* tool functions */
+std::string HttpMonitor::getHttpMethodByRequestLayer(const pcpp::HttpRequestLayer* httpLayer) const
 {
     pcpp::HttpRequestLayer::HttpMethod thisMethod = httpLayer->getFirstLine()->getMethod();
     switch( thisMethod )
@@ -250,3 +260,7 @@ std::string HttpMonitor::getHttpMethodByRequestLayer(pcpp::HttpRequestLayer* htt
     return "OTHER";
 }
 
+void HttpMonitor::clearHttpHeaderFields()
+{
+    m_httpHeaderFields.clear();
+}

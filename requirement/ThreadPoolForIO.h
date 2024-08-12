@@ -1,7 +1,6 @@
 #ifndef __THREADPOOL_FOR_IO__H__
 #define __THREADPOOL_FOR_IO__H__
 
-#include "GUnlockPack.h"
 #include "ProcIO.h"
 #include <queue>
 #include "CConfig.h"
@@ -17,10 +16,11 @@ class ThreadPoolForIO
     {
         pthread_t tid;
         bool isRunning;
-        threadItem(pthread_t tid, bool isRunning) : tid(tid), isRunning(isRunning) {};
+        ThreadPoolForIO* BelongTo;
+        threadItem(ThreadPoolForIO* p_thPoolIO, bool isRunning) : BelongTo(p_thPoolIO), isRunning(isRunning) {};
     };
 public:
-    ThreadPoolForIO(CConfig* p_ins_config);
+    ThreadPoolForIO(const CConfig* p_ins_config);
     ~ThreadPoolForIO();
     bool createThreads();
 
@@ -30,7 +30,7 @@ private:
     static std::atomic<int> m_busyThreadNum;
 
     static void* threadFunction(void* data);
-    std::vector<threadItem> m_threadList;
+    std::vector<threadItem*> m_threadList;
 
 };
 

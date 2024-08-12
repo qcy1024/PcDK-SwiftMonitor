@@ -3,7 +3,7 @@
 
 std::atomic<int> ThreadPoolForIO::m_busyThreadNum(0);
 
-ThreadPoolForIO::ThreadPoolForIO(CConfig* p_ins_config) : m_actThreadNum(0)
+ThreadPoolForIO::ThreadPoolForIO(const CConfig* p_ins_config) : m_actThreadNum(0)
 {
     m_threadNum = p_ins_config->getIntDefault("num_threads_proc_io",50);
     // pthread_mutex_init(&cntMutex, nullptr);
@@ -17,15 +17,15 @@ ThreadPoolForIO::~ThreadPoolForIO()
 bool ThreadPoolForIO::createThreads()
 {
     pthread_t this_tid = 0;
+    threadItem* tmpThreadItem;
     for( int i=0; i<m_threadNum; i++ )
     {
-        threadItem tmpThreadItem(this_tid,false);
-        if( pthread_create(&this_tid, nullptr, threadFunction, nullptr) != 0 )
+        tmpThreadItem = new threadItem(this,false);
+        if( pthread_create(&(tmpThreadItem->tid), nullptr, threadFunction, tmpThreadItem) != 0 )
         {
             // error 
             return false;
         }
-        tmpThreadItem.isRunning = true;
         m_threadList.push_back(tmpThreadItem);
         m_actThreadNum += 1;
     }
@@ -33,8 +33,9 @@ bool ThreadPoolForIO::createThreads()
 lblfor:
     for( auto iter = m_threadList.begin(); iter!=m_threadList.end(); ++iter )
     {
-        if( iter->isRunning == false )
+        if( (*iter)->isRunning == false )
         {
+            // sleep for 100*1000us.
             usleep(100*1000);
             goto lblfor;
         }
@@ -45,13 +46,16 @@ lblfor:
 void* ThreadPoolForIO::threadFunction(void* data)
 {
     IO_t* p_IOObj = IO_t::getInstance();
+    threadItem* tmpThreadItem = static_cast<threadItem*>(data);
+    int err = 0;
     while( true )
     {
         // std::cout << "threadFunction running " << std::endl;
-        pthread_mutex_lock(&(p_IOObj->m_mtx_IOOpQueue));
+        err = pthread_mutex_lock(&(p_IOObj->m_mtx_IOOpQueue));
         // obverously that g_IOOpQueue is empty when thread pool is initializing.
         while( p_IOObj->m_IOOpQueue.empty() )
         {
+            tmpThreadItem->isRunning = true;
             pthread_cond_wait(&(p_IOObj->m_IOReqCond), &(p_IOObj->m_mtx_IOOpQueue));
         }
         ThreadPoolForIO::m_busyThreadNum ++;
