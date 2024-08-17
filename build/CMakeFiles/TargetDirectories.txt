@@ -1,3 +1,0 @@
-/mnt/hgfs/traffic_analyze_100G/requirement copy/build/CMakeFiles/requirement.dir
-/mnt/hgfs/traffic_analyze_100G/requirement copy/build/CMakeFiles/edit_cache.dir
-/mnt/hgfs/traffic_analyze_100G/requirement copy/build/CMakeFiles/rebuild_cache.dir
