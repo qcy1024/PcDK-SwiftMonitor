@@ -5,15 +5,14 @@
 
 #include "CConfig.h"
 #include "CapWorker.h"
-#include "StatisticsCollector.h"
 
-#define HTTP_PORT       80
-#define HTTPS_PORT      443
-#define MYSQL_PORT      3306
+/*----------------------------- debug -----------------------------*/
 
-// for debug.
 bool useFilter = true;
+bool display_low_layers_info = false;
 bool stillCapture = true;
+bool debug_http = false;
+bool debug_dns = true;
 
 // #define DEBUF_THREADPOOL
 
@@ -23,10 +22,13 @@ void debugPrintRawPacket(pcpp::RawPacket* rawPacket)
     ins->printRawPacketData(rawPacket);
 }
 
-// Ctrl+C to stop.
+/*----------------------------- debug -----------------------------*/
+
+
+// Ctrl+C to stop. We will use sigaction in future.
 void sigHandler(int signum)
 {
-#ifdef DEBUF_THREADPOOL
+#ifdef DEBUG_THREADPOOL
     if( signum == SIGINT )
     {
         exit(0);
@@ -39,21 +41,26 @@ void sigHandler(int signum)
 #endif
 }
 
-// 程序有时候运行之后一直阻塞，问题出在线程池初始化的时候。
+CRawPacketManager* g_packManager;
+
 int main(int argc, char* argv[]) 
 {
-    std::cout << "start main." << std::endl;
-    // For easy. We will use sigaction in future.
+    // This is for easy. We will use sigaction in future.
     signal(SIGINT, sigHandler);
     std::cout << "signal registered." << std::endl;
-    CConfig* p_ins_Config = CConfig::getInstance();
 
+    // load config.
+    CConfig* p_ins_Config = CConfig::getInstance();
     if( !p_ins_Config->load("../config.conf") )
     {
         std::cout << "load config failed, exit!" << std::endl;
         exit(0); 
     }
-
+    useFilter = std::string(p_ins_Config->getString("use_filter")) == "true" ? true : false;
+    display_low_layers_info = std::string(p_ins_Config->getString("display_low_layers_info")) == "true" ? true : false;
+    debug_http = std::string(p_ins_Config->getString("debug_http")) == "true" ? true : false;
+    debug_dns = std::string(p_ins_Config->getString("debug_dns")) == "true" ? true : false;
+    std::cout << "debug_dns=" << debug_dns << ", debug_http=" << debug_http << std::endl;
     std::cout << "Config loaded." << std::endl;
     
     // Init thread pool.
@@ -63,7 +70,6 @@ int main(int argc, char* argv[])
         std::cout << "Failed to create threads, exit!" << std::endl;
         exit(0);
     }
-
     std::cout << "thread pool inited" << std::endl;
 
     // get net interface
@@ -75,8 +81,8 @@ int main(int argc, char* argv[])
         exit(0);
     }
     std::cout << "interface available: ";
-
     std::cout << dev->getName() << std::endl;
+
     // open interface 
     if ( !dev->open() )
     {
@@ -86,16 +92,18 @@ int main(int argc, char* argv[])
     else 
         printf("interface have been successfully opened.\n");
 
-    // set packet filter: http, https, mysql 
+    // set packet filter: http, https, mysql, DNS
     if( useFilter )
     {
         std::cout << "Using filter." << std::endl;
-        pcpp::OrFilter httpAndMysqlFilter;
+        pcpp::OrFilter awfFilter;
 
         pcpp::ProtoFilter TCPFilter(pcpp::TCP);
+        // pcpp::ProtoFilter UDPFilter(pcpp::UDP);
 
         pcpp::PortFilter httpPortFilter(HTTP_PORT,pcpp::SRC_OR_DST);
         pcpp::PortFilter httpsPortFilter(HTTPS_PORT,pcpp::SRC_OR_DST);
+        pcpp::PortFilter DNSPortFilter(DNS_PORT,pcpp::SRC_OR_DST);
         pcpp::PortFilter mysqlPortFilter(MYSQL_PORT,pcpp::SRC_OR_DST);
         
         pcpp::AndFilter httpFilter;
@@ -110,12 +118,19 @@ int main(int argc, char* argv[])
         mysqlFilter.addFilter(&TCPFilter);
         mysqlFilter.addFilter(&mysqlPortFilter);
 
-        httpAndMysqlFilter.addFilter(&httpFilter);
-        httpAndMysqlFilter.addFilter(&httpsFilter);
-        httpAndMysqlFilter.addFilter(&mysqlFilter);
-        dev->setFilter(httpAndMysqlFilter);
+        pcpp::AndFilter DNSFilter;
+        // DNSFilter.addFilter(&TCPFilter);
+        DNSFilter.addFilter(&DNSPortFilter);
+
+        awfFilter.addFilter(&httpFilter);
+        awfFilter.addFilter(&httpsFilter);
+        awfFilter.addFilter(&mysqlFilter);
+        awfFilter.addFilter(&DNSFilter);
+        
+        dev->setFilter(awfFilter);
     }
 
+    // start capturing.
     p_adwfOn_t p_adwfOn = new adwfOn_t;
     CapWorker::init(useFilter);
     if( dev->startCapture(CapWorker::procPacketArrived,p_adwfOn) )
@@ -128,13 +143,15 @@ int main(int argc, char* argv[])
         exit(0);
     }
 
+
+    // logic in main().
     StatisticCollector* statCollector = StatisticCollector::getInstance();
     IO_t* IOProcessor = IO_t::getInstance();
 
     // Perhaps sleep, giving up it's time slice to packet capturing thread, or maybe periodically calculate real time information , I don't know now.
     while(stillCapture)
     {
-        // sleep, or do something. do nothing is sidiupide.
+        // sleep here, or do something. do nothing is sidiupide.
         std::cout << "       * * * |-- STATISTIC INFO --| * * * " << std::endl;
         
         std::shared_ptr<std::string> strIOMSG = statCollector->getAllStatDatas();

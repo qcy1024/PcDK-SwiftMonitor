@@ -67,19 +67,5 @@ void int_to_string(int num,char* str,int max_len)
     inverse_string(str);
 }
 
-bool checkTcpHttp(pcpp::TcpLayer* tcpLayer)
-{
-    return ( tcpLayer->getSrcPort() == 80 || tcpLayer->getDstPort() == 80 );
-}
-
-bool checkTcpHttps(pcpp::TcpLayer* tcpLayer)
-{
-    return ( tcpLayer->getSrcPort() == 443 || tcpLayer->getDstPort() == 443 );
-}
-
-bool checkTcpMysql(pcpp::TcpLayer* tcpLayer)
-{
-    return ( tcpLayer->getSrcPort() == 3306 || tcpLayer->getDstPort() == 3306 );
-}
-
 #endif
+

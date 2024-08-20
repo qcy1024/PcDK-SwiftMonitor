@@ -54,16 +54,18 @@ public:
 
     std::shared_ptr<std::string> getAllStatDatas();
 
+    // get method.
     inline TYPE_STAT_IPPACK_NUM        getIPPackNum()  const { return ipPackNum; };
     inline TYPE_STAT_NIPPACK_NUM       getNIPPackNum() const { return nipPackNum; };
     inline TYPE_STAT_TCPPACK_NUM       getTcpPackNum() const { return tcpPackNum; };
+    
     inline TYPE_STAT_HTTPPACK_NUM      getHttpPackNum() const { return httpPackNum; };
     inline TYPE_STAT_HTTPREQUEST_NUM   getHttpRequestNum() const { return httpRequestNum; };
     inline TYPE_STAT_HTTPRESPONSE_NUM  getHttpResponseNum() const { return httpResponseNum; };
-
+    inline TYPE_STAT_HTTPRESPONSE_NUM  getResponseWithContentLength() const { return responseWithContentLength; } ;
 
 // Maybe protected.
-private:
+protected:
     StatisticCollector();
     virtual ~StatisticCollector();
 
@@ -85,19 +87,18 @@ private:
     std::map<std::string, TYPE_STAT_IPPACK_NUM> m_ethStat;
     std::map<std::string, TYPE_STAT_IPPACK_NUM> m_IPv4Stat;
 
-    std::map<std::string, TYPE_STAT_REQUEST_URI> m_httpRequestUrlStat;
-    std::map<std::string, TYPE_STAT_REQUEST_HOST> m_httpRequestHost;
-
     TYPE_STAT_IPPACK_NUM         ipPackNum;
     TYPE_STAT_NIPPACK_NUM        nipPackNum;
     TYPE_STAT_TCPPACK_NUM        tcpPackNum;
     TYPE_STAT_HTTPPACK_NUM       httpPackNum;
+
     // Index 0 indicate the number of "GET" and index 1 indicate the number of "POST"
     TYPE_STAT_HTTPREQUEST_NUM    httpRequestMethods[3];
     TYPE_STAT_HTTPREQUEST_NUM    httpRequestNum;
     TYPE_STAT_HTTPRESPONSE_NUM   httpResponseNum;
     TYPE_STAT_HTTPRESPONSE_NUM   responseWithContentLength;
-    
+    std::map<std::string, TYPE_STAT_REQUEST_URI> m_httpRequestUrlStat;
+    std::map<std::string, TYPE_STAT_REQUEST_HOST> m_httpRequestHost;
 
 // may be public, but public is not good.
 private:

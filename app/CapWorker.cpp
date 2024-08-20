@@ -1,5 +1,10 @@
 #include "CapWorker.h"
 
+// debug.
+extern bool debug_http;
+extern bool debug_dns;
+
+extern CRawPacketManager* g_packManager;
 bool CapWorker::useFilter = false;
 
 void CapWorker::init(bool useFilter)
@@ -10,68 +15,26 @@ void CapWorker::init(bool useFilter)
 // the callback.
 void CapWorker::procPacketArrived(pcpp::RawPacket* packet, pcpp::PcapLiveDevice* dev, void* cookie)
 {
-    pcpp::Packet parsedPacket(packet);
-    // verify packet is TCP
-    if ( !parsedPacket.isPacketOfType(pcpp::TCP) )
-        return;
-    pcpp::TcpLayer* tcpLayer = parsedPacket.getLayerOfType<pcpp::TcpLayer>();
-    if( CapWorker::useFilter && !checkTcpHttp(tcpLayer) && !checkTcpHttps(tcpLayer) && !checkTcpMysql(tcpLayer) )
-    {
-        // I/O may be executed in a new thread.
-        std::cout << "Received an unexpected packet after filtering." << std::endl;
-        return ;
-    }
-
-    // Debug
-    // std::cout << "srcPort: " << tcpLayer->getSrcPort() << ",  dstPort: " << tcpLayer->getDstPort() << std::endl;
-    // debugPrintRawPacket(packet);
-
     p_adwfOn_t ad = static_cast<adwfOn_t*>(cookie);
-    HttpMonitor* p_ins_HttpMonitor = HttpMonitor::getInstance();
-    StatisticCollector* statCollector = StatisticCollector::getInstance();
-    
-    if( parsedPacket.isPacketOfType(pcpp::HTTPRequest) )
-    {
-        // debug.
-        std::cout << __SEG__LINE__ << std::endl;
-        std::cout << "|  * * * * Http request packet received. * * * *  |" << std::endl;
-        std::cout << __SEG__LINE__ << std::endl;
+    pcpp::Packet parsedPacket(packet);
 
-        if( !p_ins_HttpMonitor->unlockHTTPRequestPacket(&parsedPacket,ad) )
-        {
-            std::cout << "Analyze http request packet failed, something went wrong." << std::endl;  
-        }
-        p_ins_HttpMonitor->httpRequestLogic(ad);
-        statCollector->collectHttpRequest(ad, parsedPacket);
+    pcpp::TcpLayer* tcpLayer = parsedPacket.getLayerOfType<pcpp::TcpLayer>();
+    if( tcpLayer != nullptr )
+    {
+        if( debug_dns )
+            return ;    // for debug procUdpPacket.
+        g_packManager->procTcpPacket(&parsedPacket, dev, ad);
     }
 
-    else if( parsedPacket.isPacketOfType(pcpp::HTTPResponse) )
+    pcpp::UdpLayer* udpLayer = parsedPacket.getLayerOfType<pcpp::UdpLayer>();
+    if( udpLayer != nullptr )
     {
-        // debug.
-        std::cout << __SEG__LINE__ << std::endl;
-        std::cout << "|  * * * * Http response packet received. * * * * |" << std::endl;
-        std::cout << __SEG__LINE__ << std::endl;
-
-        if( !p_ins_HttpMonitor->unlockHTTPResponsePacket(&parsedPacket, ad) )
-        {
-            std::cout << "Analyze http response packet failed, something went wrong." << std::endl;  
-        }
-        p_ins_HttpMonitor->httpResponseLogic(ad);
-        statCollector->collectHttpResponse(ad, parsedPacket);
+        if( debug_http )
+            return ;
+        g_packManager->procUdpPacket(&parsedPacket, dev, ad);
     }
 
-    else 
-    {
-        // std::cout << "\n not request and not response" << std::endl << std::endl;
-    }
 
-    ad->clearAll();
-
-#ifndef CLEAR_CHEAT
-    p_ins_HttpMonitor->clearHttpHeaderFields();
-#else 
-    p_ins_HttpMonitor->cheaty_clearHttpHeaderFields();
-#endif 
 }
 
 // officlial has labeled as a bug.
@@ -123,6 +86,74 @@ pcpp::Packet CapWorker::generateHTTPPacket(int type)
     std::cout << "end of generateHttpPacket " << std::endl;
     
     return httpPacket;
+
+}
+
+
+// debug.
+void CapWorker::debugDNSPacketArrive(pcpp::Packet* parsedPacket, pcpp::PcapLiveDevice* dev, void* cookie)
+{
+    std::cout << std::endl;
+
+    if( parsedPacket->isPacketOfType(pcpp::DNS) )
+    {
+        std::cout << "* * * DNS packet received. * * *" << std::endl;
+    }
+    pcpp::DnsLayer* packDNSLayer = parsedPacket->getLayerOfType<pcpp::DnsLayer>();
+    pcpp::dnshdr* packDNShdr = packDNSLayer->getDnsHeader();
+
+    std::cout << "DNShdr中有如下字段: " << std::endl;
+    std::cout << "transactionID: " << packDNShdr->transactionID << std::endl;
+    std::cout << "recursionDesired: " << packDNShdr->recursionDesired << std::endl;
+    std::cout << "truncation: " << packDNShdr->truncation << std::endl;
+    std::cout << "authoritativeAnswer: " << packDNShdr->authoritativeAnswer << std::endl;
+    std::cout << "queryOrResponse: " << packDNShdr->queryOrResponse << std::endl;
+    std::cout << "responseCode: " << packDNShdr->responseCode << std::endl;
+    std::cout << "checkingDisabled: " << packDNShdr->checkingDisabled << std::endl;
+    std::cout << "authenticData: " << packDNShdr->authenticData << std::endl;
+    std::cout << "zero: " << packDNShdr->zero << std::endl;
+    std::cout << "recursionAvailable: " << packDNShdr->recursionAvailable << std::endl;
+    std::cout << "numberOfQuestions: " << packDNShdr->numberOfQuestions << std::endl;
+    std::cout << "numberOfAnswers: " << packDNShdr->numberOfAnswers << std::endl;
+    std::cout << "numberOfAuthority: " << packDNShdr->numberOfAuthority << std::endl;
+    std::cout << "numberOfAdditional: " << packDNShdr->numberOfAdditional << std::endl;
+
+    std::cout << std::endl;
+
+    std::cout << "接下来解析Querys字段中的所有Query。" << std::endl;
+
+    DNSMonitor* p_ins_DNSMonitor = DNSMonitor::getInstance();
+
+    qcy::Vec<DNSQuery_t> dnsQueries;
+
+    size_t packQueryCount = packDNSLayer->getQueryCount();
+    pcpp::DnsQuery* it = packDNSLayer->getFirstQuery();
+    if( it == nullptr ) return ;
+    // std::string curQueryType = p_ins_DNSMonitor->getStrDnsTypeFrompcpp_DnsType(it->getDnsType());
+    // std::string curQueryClass = p_ins_DNSMonitor->getStrDnsClassFrompcpp_DnsClass(it->getDnsClass());
+    // std::string curQueryName = it->getName();
+    // dnsQueries.push_back(DNSQuery_t(curQueryName, curQueryType, curQueryClass));
+    while( packQueryCount-- )
+    {
+        pcpp::DnsQuery* nxt = packDNSLayer->getNextQuery(it);
+        std::string curQueryType = p_ins_DNSMonitor->getStrDnsTypeFrompcpp_DnsType(it->getDnsType());
+        std::string curQueryClass = p_ins_DNSMonitor->getStrDnsClassFrompcpp_DnsClass(it->getDnsClass());
+        std::string curQueryName = it->getName();
+        dnsQueries.push_back(DNSQuery_t(curQueryName, curQueryType, curQueryClass));
+        it = nxt;
+    }
+
+    std::cout << "Querys中所有字段如下: " << std::endl;
+
+    for( int i=0; i<dnsQueries.size(); i++ ) 
+    {
+        std::cout << "Query " << i+1 << ": ";
+        std::cout << dnsQueries[i] << std::endl;
+    }
+
+    dnsQueries.clear();
+
+    std::cout << std::endl;
 
 }
 

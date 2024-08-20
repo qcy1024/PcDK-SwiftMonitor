@@ -3,11 +3,12 @@
 
 #include <string>
 
-#include "RawPacket.h"
 #include "Packet.h"
 #include "SystemUtils.h"
+
 #include "ThreadPoolForIO.h"
 #include "Vec.h"
+#include "CRawPacketManager.h"
 
 #define HTTPHEADER_NAME_METHOD                  "HTTP Method"
 #define HTTPHEADER_VALUE_METHOD_GET             "GET"
@@ -34,7 +35,7 @@ typedef struct HTTPHeaderFieldClause
     } 
 }*p_HTTPHeaderFieldClause;
 
-// base class function to analyze below protocol, specific class to analyzer application layer (perhaps) and transfer layer.
+// base class function to analyze below protocol, specific class to analyzer application layer (perhaps, and transfer layer).
 class HttpMonitor : public CLowLayersUnlocker
 {
 private:
@@ -106,3 +107,4 @@ private:
 
 
 #endif
+

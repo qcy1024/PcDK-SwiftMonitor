@@ -1,8 +1,8 @@
 #include "HttpMonitor.h"
-#include "global.h"
 #include <iostream>
 
 HttpMonitor* HttpMonitor::m_instance = nullptr;
+extern CRawPacketManager* g_packManager;
 
 /* interfaces */
 HttpMonitor::HttpMonitor() : CLowLayersUnlocker()
@@ -15,7 +15,8 @@ HttpMonitor::~HttpMonitor()
     
 }
 
-bool HttpMonitor::unlockHTTPRequestPacket(pcpp::Packet* httpPacket, p_adwfOn_t ad) 
+bool HttpMonitor::unlockHTTPRequestPacket(pcpp::Packet* httpPacket,
+                                          p_adwfOn_t ad) 
 {
 #ifdef DEBUG_MODE_GLOBAL
     std::cout << "start of unlock Http request." << std::endl;
@@ -25,7 +26,7 @@ bool HttpMonitor::unlockHTTPRequestPacket(pcpp::Packet* httpPacket, p_adwfOn_t a
     // verify the packet has http request layer.
     if( !(packHttpRequestLayer = httpPacket->getLayerOfType<pcpp::HttpRequestLayer>()) )
     {
-         return false;
+        return false;
     }
 
     ad->httpMethod = getHttpMethodByRequestLayer(packHttpRequestLayer);
@@ -39,22 +40,47 @@ bool HttpMonitor::unlockHTTPRequestPacket(pcpp::Packet* httpPacket, p_adwfOn_t a
         ad->httpHost = hf->getFieldValue();
         m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_HOST_FIELD,ad->httpHost));
     }
+    else ad->httpHost = "";
     ad->httpWholeURL = ad->httpHost + ad->httpRequestUri;
     m_httpHeaderFields.push_back(HTTPHeaderFieldClause(HTTPHEADER_NAME_REQUEST_WHOLE_URL,ad->httpWholeURL));
     if( hf = packHttpRequestLayer->getFieldByName(PCPP_HTTP_USER_AGENT_FIELD) ) {
         ad->httpUserAgent = hf->getFieldValue();
         m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_USER_AGENT_FIELD,ad->httpUserAgent));
     }
+    else ad->httpUserAgent = "";
 
     if( packHttpRequestLayer->getFieldByName(PCPP_HTTP_COOKIE_FIELD) )
     {
         ad->httpCookie = packHttpRequestLayer->getFieldByName(PCPP_HTTP_COOKIE_FIELD)->getFieldValue();
         m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_COOKIE_FIELD,ad->httpCookie));
+    } 
+    else ad->httpCookie = "";
+
+    if( hf = packHttpRequestLayer->getFieldByName(PCPP_HTTP_ACCEPT_LANGUAGE_FIELD) )
+    {
+        ad->httpAcceptLanguage = packHttpRequestLayer->getFieldByName(PCPP_HTTP_ACCEPT_LANGUAGE_FIELD)->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_ACCEPT_LANGUAGE_FIELD,ad->httpAcceptLanguage));
     }
+    else ad->httpAcceptLanguage = "";
+
+    if( hf = packHttpRequestLayer->getFieldByName(PCPP_HTTP_ACCEPT_ENCODING_FIELD) ) {
+        ad->httpAcceptEncoding = packHttpRequestLayer->getFieldByName(PCPP_HTTP_ACCEPT_ENCODING_FIELD)->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_ACCEPT_ENCODING_FIELD,ad->httpAcceptEncoding));
+    }
+    else ad->httpAcceptEncoding = "";
+
+    if( hf = packHttpRequestLayer->getFieldByName(PCPP_HTTP_CONNECTION_FIELD) )  {
+        ad->httpConnection = hf->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_CONNECTION_FIELD,ad->httpConnection));
+    }
+    else ad->httpConnection = "";
+
+
     ad->httpMsgBody = getHttpRequestMsgBody(packHttpRequestLayer);
 #ifdef DEBUG_MODE_GLOBAL
     std::cout << "end of unlockHttpRequest." << std::endl;
 #endif
+
     return true;
 
 }
@@ -78,7 +104,7 @@ std::shared_ptr<std::string> HttpMonitor::getHttpRequestInfo(const p_adwfOn_t ad
     return std::make_shared<std::string>(httpInfo);
 }
 
-// print the http request information to stdout. Maybe other logics we need.
+// print the http request information to stdout. In future may be other logics we need.
 void HttpMonitor::httpRequestLogic(adwfOn_t* ad) const 
 {
 #ifdef DEBUG_MODE_GLOBAL
@@ -144,10 +170,10 @@ bool HttpMonitor::unlockHTTPResponsePacket(pcpp::Packet* httpPacket,
     else ad->httpResponseServer = "";
 
     if( hf = packHttpResponseLayer->getFieldByName(PCPP_HTTP_CONNECTION_FIELD) )  {
-        ad->httpResponseConnection = hf->getFieldValue();
-        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_CONNECTION_FIELD,ad->httpResponseConnection));
+        ad->httpConnection = hf->getFieldValue();
+        m_httpHeaderFields.push_back(HTTPHeaderFieldClause(PCPP_HTTP_CONNECTION_FIELD,ad->httpConnection));
     }
-    else ad->httpResponseConnection = "";
+    else ad->httpConnection = "";
 
     if( hf = packHttpResponseLayer->getFieldByName(PCPP_HTTP_CONTENT_TYPE_FIELD) )  {
         ad->httpResponseContentType = hf->getFieldValue();
@@ -170,6 +196,12 @@ bool HttpMonitor::unlockHTTPResponsePacket(pcpp::Packet* httpPacket,
     ad->httpMsgBody = getHttpResponseMsgBody(packHttpResponseLayer);
 
     // std::cout << "end of unlockHTTPResponsePacket." << std::endl;
+
+
+    if( hf = packHttpResponseLayer->getFieldByName("charset") ) {
+        std::cout << "Found charset field, charset : " << hf->getFieldValue() << std::endl;
+    }
+    else std::cout << "No charset field." << std::endl;
 
     return true;
 }

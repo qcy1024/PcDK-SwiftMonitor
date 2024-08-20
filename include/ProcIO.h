@@ -4,6 +4,7 @@
 #include <iostream>
 #include <atomic>
 #include <queue>
+
 #include "GUnlockPack.h"
 
 #define DEBUG_IOOP_STAT
@@ -56,7 +57,6 @@ public:
 
     static IO_t* getInstance() 
     {
-        // std::cout << "*********入**********" << std::endl;
         if( m_instance == nullptr )
         {
             // pthread_mutex_lock(&iomtx);

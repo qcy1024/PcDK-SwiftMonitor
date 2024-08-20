@@ -1,5 +1,4 @@
 #include "ProcIO.h"
-#include <iostream>
 
 pthread_mutex_t IO_t::m_mtx_ins = PTHREAD_MUTEX_INITIALIZER;
 IO_t* IO_t::m_instance = nullptr;
