@@ -281,3 +281,4 @@ namespace qcy
 };
 
 #endif // !__VEC__H
+

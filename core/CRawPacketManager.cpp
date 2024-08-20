@@ -29,7 +29,7 @@ bool CRawPacketManager::procTcpPacket(pcpp::Packet* tcpPacket, pcpp::PcapLiveDev
     if( CapWorker::useFilter && !checkTcpHttp(tcpLayer) && !checkTcpHttps(tcpLayer) 
                              && !checkTcpMysql(tcpLayer) && !checkTcpDNS(tcpLayer) )
     {
-        // I/O may be executed in a new thread.
+        // I/O will executed in a new thread.
         std::cout << "Received an unexpected TCP packet after filtering." << std::endl;
         return false;
     }
@@ -43,8 +43,6 @@ bool CRawPacketManager::procTcpPacket(pcpp::Packet* tcpPacket, pcpp::PcapLiveDev
         // debug.
         std::string hreqprcvd = std::string("") + __SEG__LINE__ + "\n" + HTTP_REQUEST_PACKET_RECEIVED + __SEG__LINE__ + "\n";
         std::cout << hreqprcvd << std::endl;
-        // IOOp_t ioop(STDOUT, hreqprcvd);
-        // p_ins_IO_t->putIOOpInQAndSignal(ioop);
 
         if( !p_ins_HttpMonitor->unlockHTTPRequestPacket(tcpPacket,ad) )
         {
@@ -59,8 +57,6 @@ bool CRawPacketManager::procTcpPacket(pcpp::Packet* tcpPacket, pcpp::PcapLiveDev
         // debug.
         std::string hresprcvd = std::string("") + __SEG__LINE__ + "\n" + HTTP_RESPONSE_PACKET_RECEIVED "\n" + __SEG__LINE__ + "\n";
         std::cout << hresprcvd << std::endl;
-        // IOOp_t ioop(STDOUT, hresprcvd);
-        // p_ins_IO_t->putIOOpInQAndSignal(ioop);
 
         if( !p_ins_HttpMonitor->unlockHTTPResponsePacket(tcpPacket, ad) )
         {
@@ -72,7 +68,7 @@ bool CRawPacketManager::procTcpPacket(pcpp::Packet* tcpPacket, pcpp::PcapLiveDev
 
     else 
     {
-        // std::cout << "\n not request and not response" << std::endl << std::endl;
+        // std::cout << "\n not Http and not DNS" << std::endl << std::endl;
     }
 
 #ifndef CLEAR_CHEAT
@@ -98,7 +94,6 @@ bool CRawPacketManager::procUdpPacket(pcpp::Packet* udpPacket, pcpp::PcapLiveDev
     IO_t* p_ins_IO_t = IO_t::getInstance();
     if( CapWorker::useFilter && !checkUdpDNS(udpLayer) )
     {
-        // I/O may be executed in a new thread.
         std::cout << "Received an unexpected UDP packet after filtering." << std::endl;
         return false;
     }
@@ -111,8 +106,6 @@ bool CRawPacketManager::procUdpPacket(pcpp::Packet* udpPacket, pcpp::PcapLiveDev
         // debug.
         std::string dnsprcvd = std::string("") + __SEG__LINE__ + "\n" + DNS_PACKET_RECEIVED + "\n" + __SEG__LINE__ + "\n";
         std::cout << dnsprcvd << std::endl;
-        // IOOp_t ioop(STDOUT, dnsprcvd);
-        // p_ins_IO_t->putIOOpInQAndSignal(ioop);
 
         if( !p_ins_DNSMonitor->unlockDNSPacket(udpPacket,ad) )
         {
@@ -121,7 +114,6 @@ bool CRawPacketManager::procUdpPacket(pcpp::Packet* udpPacket, pcpp::PcapLiveDev
         p_ins_DNSMonitor->dnsLogic(ad);
         p_ins_DNSStatisticCollector->collectDns(ad, *udpPacket);
     }
-
     return true;
 }
 

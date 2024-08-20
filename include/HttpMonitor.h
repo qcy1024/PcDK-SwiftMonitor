@@ -60,10 +60,6 @@ private:
     qcy::Vec<HTTPHeaderFieldClause> m_httpHeaderFields;
     
 public:
-    // inherited from CLowLayersUnlocker
-    // bool unlockLowLayers(pcpp::Packet* parsedPacket, p_adwfOn_t ad);
-    // std::shared_ptr<std::string> getLowLayerInfo(p_adwfOn_t ad);
-
     // We make sure that getInstance() is called only by packet capturing thread.
     static HttpMonitor* getInstance() 
     {
@@ -74,7 +70,6 @@ public:
         return m_instance;
     }
 
-
     /* Interfaces */
 
     // HTTP Request
@@ -82,7 +77,6 @@ public:
     std::shared_ptr<std::string> getHttpRequestInfo(const p_adwfOn_t ad) const;
     void httpRequestLogic(adwfOn_t* ad) const ;
     auto getHttpRequestMsgBody(const pcpp::HttpRequestLayer* httpRequestLayer) const -> std::shared_ptr<std::string>;
-    
     
     // HTTP Response
     bool unlockHTTPResponsePacket(pcpp::Packet* httpPacket, p_adwfOn_t ad);

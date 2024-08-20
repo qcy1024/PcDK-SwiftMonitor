@@ -119,7 +119,6 @@ int main(int argc, char* argv[])
         mysqlFilter.addFilter(&mysqlPortFilter);
 
         pcpp::AndFilter DNSFilter;
-        // DNSFilter.addFilter(&TCPFilter);
         DNSFilter.addFilter(&DNSPortFilter);
 
         awfFilter.addFilter(&httpFilter);

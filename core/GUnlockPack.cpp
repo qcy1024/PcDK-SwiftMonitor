@@ -102,30 +102,6 @@ bool CLowLayersUnlocker::unlockLowLayers(const pcpp::Packet* parsedPacket, p_adw
 
 std::shared_ptr<std::string> CLowLayersUnlocker::getLowLayerInfo(const p_adwfOn_t ad) const 
 {
-    // std::string httpInfo = std::string("") 
-    //     + "\n"
-    //     + "  |-- ETHERNET INFO --|   " + "\n"
-    //     + __SEG__LINE__ + "\n"
-    //     + "Source Mac Address:   " + ad->srcMacAddress + "\n"
-    //     + "Dest Mac Address:     " + ad->dstMacAddress + "\n"
-    //     + "Ethernet type:        " + std::to_string(ad->etherType) + "\n"
-    //     + __SEG__LINE__ + "\n"
-    //     + "  |-- IPV4 INFO --|   " + "\n"
-    //     + __SEG__LINE__ + "\n"
-    //     + "Source IP Address:    " + ad->srcIPAddress + "\n"
-    //     + "Dest IP Address:      " + ad->dstIPAddress + "\n"
-    //     + "IP ID:                " + std::to_string(ad->ipid) + "\n"
-    //     + "TTL:                  " + std::to_string(ad->TTL) + "\n"
-    //     + __SEG__LINE__ + "\n"
-    //     + "  |-- TCP INFO --|   " + "\n"
-    //     + __SEG__LINE__ + "\n"
-    //     + "Source TCP Port:      " + std::to_string(ad->srcTcpPort) + "\n"
-    //     + "Dest TCP Port:        " + std::to_string(ad->dstTcpPort) + "\n"
-    //     + "TCP FLAGS:            " + ad->tcpFlags + "\n"
-    //     + "Window Size:          " + std::to_string(ad->wdSize) + "\n";
-    
-    // std::shared_ptr<std::string> ret = std::make_shared<std::string>(httpInfo);
-
     std::string lowLayerInfo = std::string("");
     for( qcy::Vec<lowLayersInfoItem>::iterator it = m_lowLayersInfo.begin(); it != m_lowLayersInfo.end(); ++it )
     {

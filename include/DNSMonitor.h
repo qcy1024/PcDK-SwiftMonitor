@@ -46,9 +46,6 @@ private:
     static Garbo garbo;
     
 public:
-    // inherited from CLowLayersUnlocker
-    // bool unlockLowLayers(pcpp::Packet* parsedPacket, p_adwfOn_t ad);
-    // std::shared_ptr<std::string> getLowLayerInfo(p_adwfOn_t ad);
 
     // We make sure that getInstance() is called only by packet capturing thread.
     static DNSMonitor* getInstance() 
@@ -69,8 +66,9 @@ public:
 public:
     std::string                             m_dnsTransactionID;
     qcy::Vec<DNSQuery_t*>                   m_dnsQueries;
+#ifdef DEBUG_DNS
     std::atomic<int>                        m_dnsPackNum;
-
+#endif
     void clear_m_dnsQueries();
 
     std::string getStrDnsTypeFrompcpp_DnsType(pcpp::DnsType dnstype);

@@ -67,7 +67,6 @@ public:
     bool procTcpPacket(pcpp::Packet* tcpPacket, pcpp::PcapLiveDevice* dev, adwfOn_t* ad) const;
     bool procUdpPacket(pcpp::Packet* udpPacket, pcpp::PcapLiveDevice* dev, adwfOn_t* ad) const;
 
-
 private:
     // for safe.
     bool checkTcpHttp(pcpp::TcpLayer* tcpLayer) const ;

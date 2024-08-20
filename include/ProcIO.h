@@ -1,3 +1,8 @@
+/** 
+ * IO operation processor.
+ * In application layer, In order to process the packets captured by the network card at the highest possible rate and prevent packet loss,
+ * We want our packet capturing thread to continuously perform computation tasks without being blocked by I/O.
+ */
 #ifndef __PROCIO__H__
 #define __PROCIO__H__
 
@@ -59,25 +64,13 @@ public:
     {
         if( m_instance == nullptr )
         {
-            // pthread_mutex_lock(&iomtx);
-            // std::cout << "此时m_instance == nullptr" << std::endl;
-            // pthread_mutex_unlock(&iomtx);
             pthread_mutex_lock(&IO_t::m_mtx_ins);
-            // pthread_mutex_lock(&iomtx);
-            // std::cout << "一个线程拿到了锁。"  << std::endl;
-            // pthread_mutex_unlock(&iomtx);
             if( m_instance == nullptr )
             {
                 m_instance = new IO_t;
             }
             pthread_mutex_unlock(&IO_t::m_mtx_ins);
-            // pthread_mutex_lock(&iomtx);
-            // std::cout << "一个线程放开了锁。"  << std::endl;
-            // pthread_mutex_unlock(&iomtx);
         }
-        // pthread_mutex_lock(&iomtx);
-        // std::cout << "一个线程成功拿到了m_instance 返回了。" << std::endl;
-        // pthread_mutex_unlock(&iomtx);
         return m_instance;
     }
 

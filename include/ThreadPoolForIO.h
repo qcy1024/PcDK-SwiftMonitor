@@ -1,3 +1,9 @@
+/** 
+ * IO operation processor.
+ * In application layer, In order to process the packets captured by the network card at the highest possible rate and prevent packet loss,
+ * We want our packet capturing thread to continuously perform computation tasks without being blocked by I/O.
+ */
+
 #ifndef __THREADPOOL_FOR_IO__H__
 #define __THREADPOOL_FOR_IO__H__
 

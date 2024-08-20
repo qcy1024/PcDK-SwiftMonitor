@@ -115,7 +115,6 @@ void HttpMonitor::httpRequestLogic(adwfOn_t* ad) const
     IOOp_t tmpIOOp(io_op,*shp_httpInfo);
     IO_t* io_ins = IO_t::getInstance();
     
-    // all IO operations are executed in IO thread pool
     io_ins->putIOOpInQAndSignal(tmpIOOp);
 
     // Perhaps IO operations are executed in packet capturing thread when all threads in IO thread pool are busy.
@@ -257,6 +256,7 @@ HttpMonitor::getHttpResponseMsgBody(const pcpp::HttpResponseLayer* httpResponseL
     return ret;
 }
 
+// for debug.
 void HttpMonitor::printAD(const p_adwfOn_t ad)
 {
     std::string httpInfo = std::string("") 
@@ -274,8 +274,6 @@ void HttpMonitor::printAD(const p_adwfOn_t ad)
     TYPE_IOOP io_op = STDOUT;
     IOOp_t tmpIOOp(io_op,httpInfo);
     IO_t* io_ins = IO_t::getInstance();
-    
-    // all IO operations are executed in IO thread pool
     io_ins->putIOOpInQAndSignal(tmpIOOp);
 }
 

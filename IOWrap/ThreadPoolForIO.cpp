@@ -35,17 +35,11 @@ bool ThreadPoolForIO::createThreads()
         m_actThreadNum += 1;
     }
 
-    // pthread_mutex_lock(&iomtx);
-    // std::cout << "***actThreadNum = " << m_actThreadNum << std::endl;
-    // std::cout << "***vector.size() == " << m_threadList.size() << std::endl;
-    // pthread_mutex_unlock(&iomtx);
-
 lblfor:
     for( auto iter = m_threadList.begin(); iter!=m_threadList.end(); ++iter )
     {
         if( (*iter)->isRunning == false )
         {
-            // std::cout << "some thread is false." << std::endl;
             // sleep for 100*1000us.
             usleep(100*1000);
             goto lblfor;

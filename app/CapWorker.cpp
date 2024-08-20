@@ -33,8 +33,6 @@ void CapWorker::procPacketArrived(pcpp::RawPacket* packet, pcpp::PcapLiveDevice*
             return ;
         g_packManager->procUdpPacket(&parsedPacket, dev, ad);
     }
-
-
 }
 
 // officlial has labeled as a bug.

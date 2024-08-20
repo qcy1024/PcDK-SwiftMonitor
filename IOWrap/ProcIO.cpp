@@ -13,7 +13,6 @@ IO_t::IO_t() : m_ioPutcnt(0), m_processedIOcnt(0)
     // process a IO operation.
     bool IO_t::procIOOp(IOOp_t op)
     {
-        // std::cout << "procIOOp running" << std::endl;
         switch( op.opType )
         {
             case STDOUT : 
@@ -36,7 +35,6 @@ IO_t::IO_t() : m_ioPutcnt(0), m_processedIOcnt(0)
         pthread_mutex_unlock(&m_mtx_IOOpQueue);
         m_ioPutcnt++;
         pthread_cond_signal(&m_IOReqCond);
-        // std::cout << "put in IOq scceed." << std::endl;
         return true;
     }
 
